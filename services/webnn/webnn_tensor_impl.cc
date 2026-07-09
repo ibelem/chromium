@@ -4,11 +4,13 @@
 
 #include "services/webnn/webnn_tensor_impl.h"
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/bind_post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "services/webnn/error.h"
 #include "services/webnn/gpu_task_scheduler.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
@@ -163,6 +165,11 @@ void WebNNTensorImpl::ImportTensor(uint64_t flow_id,
 
 void WebNNTensorImpl::ExportTensor(uint64_t flow_id, uint64_t release_count) {
   ScopedTrace scoped_trace("WebNNTensorImpl::ExportTensor");
+
+  if (!base::FeatureList::IsEnabled(features::kSyncPointGraphValidation)) {
+    GetMojoReceiver().ReportBadMessage(kBadMessageInvalidTensor);
+    return;
+  }
 
   if (!usage().Has(MLTensorUsageFlags::kWebGpuInterop)) {
     GetMojoReceiver().ReportBadMessage(kBadMessageInvalidTensor);
