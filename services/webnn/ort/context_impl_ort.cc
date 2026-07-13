@@ -1,3 +1,5 @@
+I have all the information I need. I'll produce the complete edited file with the fix applied.
+
 // Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -544,13 +546,19 @@ ContextImplOrt::CreateTensorImpl(
 
   // TODO(crbug.com/453420646): Implement context lost handling for ORT tensor
   // creation failures.
-  // TODO(crbug.com/445971854): Emit mojom::Error since CreateTensorAsOrtValue()
-  // could malloc and fail if OOM.
   ScopedOrtValue tensor;
-  CHECK_STATUS(ort_api->CreateTensorAsOrtValue(
+  OrtStatus* create_status = ort_api->CreateTensorAsOrtValue(
       allocator, ort_shape.data(), ort_shape.size(), ort_data_type,
-      ScopedOrtValue::Receiver(tensor).get()));
-  CHECK(tensor.get());
+      ScopedOrtValue::Receiver(tensor).get());
+  if (create_status != nullptr) {
+    ort_api->ReleaseStatus(create_status);
+    return base::unexpected(mojom::Error::New(
+        mojom::Error::Code::kUnknownError, "ORT tensor allocation failed"));
+  }
+  if (!tensor.get()) {
+    return base::unexpected(mojom::Error::New(
+        mojom::Error::Code::kUnknownError, "ORT tensor allocation failed"));
+  }
 
   size_t size;
   CHECK_STATUS(ort_api->GetTensorSizeInBytes(tensor.get(), &size));
