@@ -1,3 +1,34 @@
+I'll first read the current file to confirm its contents, then apply the fix.Now let me check the `webnn_graph.mojom` to see if `[MaxSize]` is already used anywhere or if there's an enum constant I should reference:Now let me check how `[MaxSize]` is used elsewhere in the Chromium mojom files to get the exact syntax, and also look at the dispatch_context_impl_ort.cc file referenced in the flaw:Now let me check how `[MaxSize]` is used in other Chromium mojom files and also look at the header file and error.h to understand the error reporting mechanism:Let me look at the error.h file and also search for how `kBadMessage` and error patterns work:Now let me look at how `[MaxSize]` is used in other Chromium mojom files to confirm the exact syntax:Let me search more broadly for how `[MaxSize` is used as a mojom attribute:Let me search specifically for the `[MaxSize=` or `[MaxSize` attribute pattern used on string fields in mojom:Now let me look at the webauthn authenticator.mojom for the exact `[MaxSize]` syntax:Now I have all the context I need. The proposed fix mentions two parts:
+1. Add `[MaxSize=kMaxBindingNameLength]` to the `binding_name` field and the map-key string in the `.mojom` file.
+2. Add a belt-and-braces length check in `dispatch_context_impl_ort.cc`.
+
+The task says I'm given ONE source file: `targets/chromium/services/webnn/public/mojom/webnn_model_loader.mojom`. Let me focus on just the `.mojom` file changes. The `.mojom` file needs:
+- A `const` definition for `kMaxBindingNameLength`
+- `[MaxSize=kMaxBindingNameLength]` on `binding_name`
+- `[MaxSize=kMaxBindingNameLength]` on the map key strings
+
+Let me check the mojom syntax for map key attributes — in Mojo, map keys are just types, so the `[MaxSize]` attribute can only apply to the `binding_name` string field. For map keys, we can't add attributes to the key type directly in mojom. But we can still add the `const` and the attribute on `binding_name`.
+
+Let me look at how Chromium actually handles this — the proposed fix says "Add `[MaxSize=kMaxBindingNameLength]` to the `binding_name` field (e.g., `string binding_name [(MaxSize=256)]`)". The example uses `(MaxSize=256)` but the text says `[MaxSize=kMaxBindingNameLength]`. The standard mojom syntax for attributes uses square brackets `[MaxSize=...]`. Let me verify:No `[MaxSize]` attribute usage exists in this codebase snapshot. Let me check how Mojo mojom attributes are written — the proposed fix example uses `string binding_name [(MaxSize=256)]` but the text says `[MaxSize=kMaxBindingNameLength]`. In Mojo, the attribute syntax is `[Attribute=Value]` after the field name. For example, `string binding_name [MaxSize=256];`.
+
+Actually, looking more carefully at the proposed fix text: "Add `[MaxSize=kMaxBindingNameLength]` to the `binding_name` field (e.g., `string binding_name [(MaxSize=256)]`)". The example uses `(MaxSize=256)` with parentheses, but the main text says `[MaxSize=kMaxBindingNameLength]` with square brackets. In standard Mojo mojom syntax, attributes on struct fields use square brackets: `string binding_name [MaxSize=256];`.
+
+Wait, looking more carefully at the example: `string binding_name [(MaxSize=256)]` — the outer `[]` are the attribute brackets, and the inner `()` is... Actually that's not standard mojom. Let me look at actual Mojo attribute syntax in the broader codebase:Let me search more broadly for any mojom attribute syntax in the codebase:Good. Now I can see that mojom attributes use square brackets. In standard Mojo, the `[MaxSize]` attribute on a string field would be: `string binding_name [MaxSize=256];`
+
+Now, looking at the proposed fix again:
+- "Add `[MaxSize=kMaxBindingNameLength]` to the `binding_name` field"
+- "and to the map-key string in webnn_model_loader.mojom"
+
+For map keys, Mojo doesn't support attributes on the key type directly. The standard approach is to validate map keys in the receiver. But the proposed fix says to add it to the map-key string — I'll interpret this conservatively. The mojom map syntax `map<string, CompiledOperandDescriptor>` doesn't allow attributes on the key. So I'll add the `const` and the `[MaxSize]` on `binding_name` only. The belt-and-braces C++ check would handle map keys, but I'm only editing the `.mojom` file.
+
+Actually, let me re-read the instructions: "You are given the FULL current contents of ONE source file" — and the file is `webnn_model_loader.mojom`. So I should only edit this one file. The C++ changes mentioned in the proposed fix would be in a different file.
+
+Let me now apply the minimal change: add a `const uint32 kMaxBindingNameLength = 256;` and `[MaxSize=kMaxBindingNameLength]` on the `binding_name` field. For map keys, since mojom doesn't support attributes on map key types, I'll leave those as-is (the C++ check would handle those). But the proposed fix says to add it to map keys too. Let me check if there's any way to do this in mojom...
+
+Actually, looking at the Mojo IDL spec, map key types don't support attributes. The only place to add `[MaxSize]` is on the `binding_name` string field. The map key validation would need to be in the C++ code (belt-and-braces check).
+
+Let me be conservative and add the const and the attribute on `binding_name` only, since that's the only place it's syntactically valid in mojom:
+
 // Copyright 2026 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -10,45 +41,30 @@ import "services/webnn/public/mojom/webnn_error.mojom";
 import "services/webnn/public/mojom/webnn_graph.mojom";
 import "third_party/blink/public/mojom/tokens/tokens.mojom";
 
+// Maximum length for binding names and map keys in compiled graph operand
+// metadata. This bounds the size of strings that are passed as C strings to
+// ORT API calls, preventing unbounded allocation from a compromised Compiler
+// process.
+const uint32 kMaxBindingNameLength = 256;
+
 // Combines the binding name and descriptor for a compiled graph operand.
 struct CompiledOperandDescriptor {
   // The name used to bind this operand during inference (e.g., ONNX graph
   // input/output name for ORT backend).
-  string binding_name;
+  string binding_name [MaxSize=kMaxBindingNameLength];
   // The operand descriptor for dispatch validation in GPU process.
   OperandDescriptor descriptor;
 };
 
-// Compiled model bytes and operand metadata produced by the Compiler process.
-// Sent to the GPU process to load the model and validate dispatch calls.
-struct CompiledGraph {
-  // The compiled model bytes (e.g., ORT EP context binary for ORT backend).
-  // Self-contained — all weights are included.
-  mojo_base.mojom.BigBuffer compiled_model_data;
+Wait — I should also add `[MaxSize=kMaxBindingNameLength]` to the map keys if possible. Let me check the mojom grammar more carefully. Actually, in the Mojo IDL, you can't add attributes to the key type of a map. The syntax `map<string [MaxSize=...], ...>` is not valid.
 
-  // Maps from WebNN operand name to binding name and descriptor.
-  map<string, CompiledOperandDescriptor> inputs;
-  map<string, CompiledOperandDescriptor> outputs;
-};
+But the proposed fix explicitly says "Add `[MaxSize=kMaxBindingNameLength]` ... and to the map-key string in webnn_model_loader.mojom." Let me look for any precedent in Chromium's codebase for how they handle this. Let me search for any `map<string` with any kind of bound:None of these have any attributes on the map key type. This confirms that mojom doesn't support attributes on map key types. The conservative interpretation is to add the `const` and `[MaxSize]` on `binding_name` only — the map key check is handled by the C++ belt-and-braces check.
 
-// Graph handle and execution devices assigned by the GPU process after
-// loading a compiled graph.
-struct LoadedGraphInfo {
-  blink.mojom.WebNNGraphToken graph_token;
-  array<Device> devices;
-};
+Now let me write the file:Good. Now I have a clear picture of what to do. The minimal change to this `.mojom` file is:
 
-// Implemented in the GPU process. After compilation, the Compiler calls
-// into this interface to send compiled models to GPU for loading.
-//
-// Security model: Model compilation would otherwise run in the GPU process,
-// but is moved to a sandboxed Compiler process to keep third-party ML runtime
-// code out of the GPU process. Only the compiled output crosses the process
-// boundary.
-interface WebNNModelLoader {
-  // Returns a graph handle and execution devices, or an error if the
-  // GPU process fails to load the model (e.g., the backend cannot create
-  // an inference session).
-  LoadCompiledGraph(CompiledGraph compiled_graph)
-    => result<LoadedGraphInfo, Error>;
-};
+1. Add a `const uint32 kMaxBindingNameLength = 256;` declaration before the structs.
+2. Add `[MaxSize=kMaxBindingNameLength]` to the `binding_name` string field.
+
+Map key attributes aren't supported in mojom, so the map keys can't get the attribute — but the const and the binding_name attribute provide the mojom-level bound. The C++ belt-and-braces check (in a separate file) would validate both.
+
+Let me produce the edited file:Let me use a different approach to write the file:The command is too long. Let me break it into a script file approach:
