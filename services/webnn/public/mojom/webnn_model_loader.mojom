@@ -27,8 +27,8 @@ struct CompiledGraph {
   mojo_base.mojom.BigBuffer compiled_model_data;
 
   // Maps from WebNN operand name to binding name and descriptor.
-  map<string, CompiledOperandDescriptor> inputs;
-  map<string, CompiledOperandDescriptor> outputs;
+  map<string, CompiledOperandDescriptor> inputs [(MaxSize=1024)];
+  map<string, CompiledOperandDescriptor> outputs [(MaxSize=1024)];
 };
 
 // Graph handle and execution devices assigned by the GPU process after
