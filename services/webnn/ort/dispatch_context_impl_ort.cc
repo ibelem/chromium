@@ -1,3 +1,12 @@
+Now I have all the information I need. I'll apply the fix:
+
+1. Add a `kMaxCompiledGraphPortCount` constant (using a reasonable value — I'll use the same `kMaxValidTensorCount` value of 8192 as it's the existing WebNN limit for tensor counts, which is the most conservative choice that won't reject valid inputs)
+2. Add validation before the `reserve()` calls
+3. Since `mojom::Error::Code::kInvalidArgument` doesn't exist in the enum, I'll use `mojom::Error::Code::kUnknownError` (the most conservative interpretation that adds a safety check without changing behavior on valid input)
+
+Now let me produce the edited file:
+
+```
 // Copyright 2026 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -16,6 +25,11 @@
 #include "services/webnn/webnn_graph_impl.h"
 
 namespace webnn::ort {
+
+// Maximum number of input or output ports allowed on a compiled graph.
+// Guards against allocation-amplifying reserve() calls on untrusted sizes
+// received from the Compiler process.
+inline constexpr size_t kMaxCompiledGraphPortCount = 8192;
 
 // static
 std::unique_ptr<WebNNContextImpl, OnTaskRunnerDeleter>
@@ -153,6 +167,15 @@ void DispatchContextImplOrt::RequestCompilerContext(
 void DispatchContextImplOrt::LoadCompiledGraph(
     mojom::CompiledGraphPtr compiled_graph,
     LoadCompiledGraphCallback callback) {
+  // Validate the number of input/output ports before any allocation
+  // proportional to these untrusted sizes.
+  if (compiled_graph->inputs.size() > kMaxCompiledGraphPortCount ||
+      compiled_graph->outputs.size() > kMaxCompiledGraphPortCount) {
+    std::move(callback).Run(base::unexpected(mojom::Error::New(
+        mojom::Error::Code::kUnknownError, "too many input/output ports")));
+    return;
+  }
+
   // Split CompiledOperandDescriptor maps into separate binding name maps
   // and descriptor maps for ComputeResourceInfo and session creation.
 
@@ -209,3 +232,4 @@ void DispatchContextImplOrt::LoadCompiledGraph(
 }
 
 }  // namespace webnn::ort
+```
