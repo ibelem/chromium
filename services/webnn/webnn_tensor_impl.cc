@@ -216,6 +216,13 @@ void WebNNTensorImpl::ExportTensorSync(uint64_t flow_id,
                                        ExportTensorSyncCallback callback) {
   ScopedTrace scoped_trace("WebNNTensorImpl::ExportTensorSync");
 
+  // Reject the call when the feature is disabled to avoid a cross-process
+  // release-token race on the shared-image tensor memory.
+  if (!features::IsSyncPointGraphValidationEnabled()) {
+    GetMojoReceiver().ReportBadMessage(kBadMessageAsyncExportNotSupported);
+    return;
+  }
+
   if (!usage().Has(MLTensorUsageFlags::kWebGpuInterop)) {
     GetMojoReceiver().ReportBadMessage(kBadMessageInvalidTensor);
     return;
@@ -226,12 +233,14 @@ void WebNNTensorImpl::ExportTensorSync(uint64_t flow_id,
     return;
   }
 
-  gpu::SyncToken release;
-  if (release_count != 0) {
-    release = gpu::SyncToken(
-        context_->gpu_task_scheduler()->namespace_id(),
-        context_->gpu_task_scheduler()->command_buffer_id(), release_count);
+  if (release_count == 0) {
+    GetMojoReceiver().ReportBadMessage(kBadMessageInvalidTensor);
+    return;
   }
+
+  gpu::SyncToken release = gpu::SyncToken(
+      context_->gpu_task_scheduler()->namespace_id(),
+      context_->gpu_task_scheduler()->command_buffer_id(), release_count);
 
   context_->RunOrScheduleTask(
       base::BindOnce(
