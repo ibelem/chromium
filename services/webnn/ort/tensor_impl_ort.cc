@@ -64,7 +64,7 @@ base::span<uint8_t> TensorImplOrt::AsSpan() const {
   // SAFETY: ORT guarantees that it has allocated enough memory to
   // store tensor.
   return UNSAFE_BUFFERS(
-      base::span(static_cast<uint8_t*>(ort_tensor_raw_data), size_));
+      base::span(static_cast<uint8_t*>(ort_tensor_raw_data), PackedByteLength()));
 }
 
 void TensorImplOrt::ReadTensorImpl(ReadTensorCallback callback) {
