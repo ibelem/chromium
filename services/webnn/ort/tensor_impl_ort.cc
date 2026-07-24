@@ -71,7 +71,8 @@ void TensorImplOrt::ReadTensorImpl(ReadTensorCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   base::span<const uint8_t> buffer_span = AsSpan();
-  CHECK_EQ(PackedByteLength(), buffer_span.size());
+  CHECK_GE(buffer_span.size(), PackedByteLength());
+  buffer_span = buffer_span.first(PackedByteLength());
   std::move(callback).Run(mojom::ReadTensorResult::NewBuffer(
       context_->WriteDataToDataPipeOrBigBuffer(buffer_span)));
 }
