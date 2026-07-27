@@ -1,3 +1,5 @@
+Now I have a clear picture of the file and the amended fix. The fix implements **option 2**: clamp `AsSpan()` to `PackedByteLength()` so neither the read nor the write path can ever observe a span longer than the descriptor's packed length, eliminating both the `CHECK_EQ` abort in `ReadTensorImpl` and the `copy_from` CHECK abort in `WriteTensorImpl` when a compromised renderer supplies a mismatched mailbox backing.
+
 // Copyright 2025 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -61,18 +63,24 @@ base::span<uint8_t> TensorImplOrt::AsSpan() const {
       PlatformFunctions::GetInstance()->ort_api()->GetTensorMutableData(
           tensor_.get(), &ort_tensor_raw_data));
   CHECK(ort_tensor_raw_data);
-  // SAFETY: ORT guarantees that it has allocated enough memory to
-  // store tensor.
-  return UNSAFE_BUFFERS(
-      base::span(static_cast<uint8_t*>(ort_tensor_raw_data), size_));
+  // Clamp to PackedByteLength() so that a renderer-supplied shared-image
+  // backing whose reported size exceeds the descriptor's packed byte length
+  // cannot cause a CHECK failure in either the read or write path.  The
+  // upstream validation in ContextImplOrt::CreateTensorFromSharedImageImpl
+  // already rejects buffer_size < PackedByteLength(), so size_ is always
+  // >= PackedByteLength(); the min() here defends the symmetric upper bound.
+  // SAFETY: ORT guarantees that it has allocated enough memory to store the
+  // tensor (i.e. at least size_ bytes), so clamping to a smaller
+  // PackedByteLength() is safe.
+  return UNSAFE_BUFFERS(base::span(static_cast<uint8_t*>(ort_tensor_raw_data),
+                                   std::min(size_, PackedByteLength())));
 }
 
 void TensorImplOrt::ReadTensorImpl(ReadTensorCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   base::span<const uint8_t> buffer_span = AsSpan();
-  CHECK_GE(buffer_span.size(), PackedByteLength());
-  buffer_span = buffer_span.first(PackedByteLength());
+  DCHECK_EQ(PackedByteLength(), buffer_span.size());
   std::move(callback).Run(mojom::ReadTensorResult::NewBuffer(
       context_->WriteDataToDataPipeOrBigBuffer(buffer_span)));
 }
