@@ -2933,7 +2933,40 @@ void GraphBuilderOrt::AddScatterNDOperation(
   std::string clamped_indices = ClampGatherNDIndices(
       int64_indices, input_descriptor.shape(), indices_descriptor.shape());
 
-  std::array<const char*, 3> inputs = {input.c_str(), clamped_indices.c_str(),
+  const size_t indices_last_dim_size = indices_descriptor.shape().back();
+  const std::string input_dimensions =
+      CreateInt64InitializerForUint32Array(base::span(input_descriptor.shape())
+                                               .first(indices_last_dim_size));
+  const std::string adjusted_indices = GenerateOperandName();
+  const std::string add_node_name = GenerateNodeName(
+      GenerateEmulatedOpLabel(kOpTypeAdd, scatter_nd.label));
+  std::array<const char*, 2> add_inputs = {clamped_indices.c_str(),
+                                           input_dimensions.c_str()};
+  std::array<const char*, 1> add_outputs = {adjusted_indices.c_str()};
+  model_editor_.AddNode(kOpTypeAdd, add_node_name, add_inputs, add_outputs);
+
+  const std::string zero = CreateScalarInitializer<int64_t>(0);
+  const std::string negative_indices = GenerateOperandName();
+  const std::string less_node_name = GenerateNodeName(
+      GenerateEmulatedOpLabel(kOpTypeLesser, scatter_nd.label));
+  std::array<const char*, 2> less_inputs = {clamped_indices.c_str(),
+                                            zero.c_str()};
+  std::array<const char*, 1> less_outputs = {negative_indices.c_str()};
+  model_editor_.AddNode(kOpTypeLesser, less_node_name, less_inputs,
+                        less_outputs);
+
+  const std::string normalized_indices = GenerateOperandName();
+  const std::string where_node_name = GenerateNodeName(
+      GenerateEmulatedOpLabel(kOpTypeWhere, scatter_nd.label));
+  std::array<const char*, 3> where_inputs = {
+      negative_indices.c_str(), adjusted_indices.c_str(),
+      clamped_indices.c_str()};
+  std::array<const char*, 1> where_outputs = {normalized_indices.c_str()};
+  model_editor_.AddNode(kOpTypeWhere, where_node_name, where_inputs,
+                        where_outputs);
+
+  std::array<const char*, 3> inputs = {input.c_str(),
+                                       normalized_indices.c_str(),
                                        updates.c_str()};
   std::array<const char*, 1> outputs = {output.c_str()};
 
