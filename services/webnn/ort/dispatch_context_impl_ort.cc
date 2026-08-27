@@ -103,6 +103,13 @@ void DispatchContextImplOrt::RequestCompilerContext(
         compiler_context_receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  // Mirror the single-live-context guard in WebNNCompilerProcessHost.
+  if (model_loader_receiver_.is_connected()) {
+    ReportBadMessageAndDisconnect(
+        "RequestCompilerContext called while a compiler context is active");
+    return;
+  }
+
   // Create the ModelLoader pipe pair on this thread (the owning thread where
   // model_loader_receiver_ lives), avoiding cross-thread posting.
   model_loader_receiver_.reset();
