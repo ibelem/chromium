@@ -77,7 +77,7 @@ void CompilerContextImplOrt::CreateGraphBuilder(
 
 void CompilerContextImplOrt::BuildGraph(
     mojom::GraphInfoPtr graph_info,
-    WebNNGraphImpl::ComputeResourceInfo /*compute_resource_info*/,
+    WebNNGraphImpl::ComputeResourceInfo compute_resource_info,
     base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>
         constant_operands,
     BuildGraphCallback callback) {
@@ -98,7 +98,8 @@ void CompilerContextImplOrt::BuildGraph(
                      std::move(graph_info), session_options_, env_, properties_,
                      std::move(constant_operands)),
       base::BindOnce(&CompilerContextImplOrt::DidCompile,
-                     base::Unretained(this), std::move(wrapped_callback)));
+                     base::Unretained(this), std::move(compute_resource_info),
+                     std::move(wrapped_callback)));
 }
 
 // static
@@ -209,6 +210,7 @@ CompilerContextImplOrt::CompileOnBackgroundThread(
 }
 
 void CompilerContextImplOrt::DidCompile(
+    WebNNGraphImpl::ComputeResourceInfo compute_resource_info,
     BuildGraphCallback callback,
     base::expected<std::unique_ptr<CompilationResult>, mojom::ErrorPtr>
         result) {
@@ -225,7 +227,8 @@ void CompilerContextImplOrt::DidCompile(
   auto compiled_graph = mojom::CompiledGraph::New(
       std::move(compilation->compiled_model_data),
       std::move(compilation->operand_input_name_to_onnx_input_name),
-      std::move(compilation->operand_output_name_to_onnx_output_name));
+      std::move(compilation->operand_output_name_to_onnx_output_name),
+      std::move(compute_resource_info));
 
   // Send compiled graph to GPU process.
   model_loader_->LoadCompiledGraph(
