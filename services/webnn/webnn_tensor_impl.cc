@@ -259,7 +259,12 @@ void WebNNTensorImpl::ExportTensorSync(uint64_t flow_id,
 
 void WebNNTensorImpl::OnDisconnect() {
   ResetMojoReceiver();
-  context_->RemoveWebNNTensorImpl(handle());
+  // Defer teardown after prior scheduled tasks as ImportTensor() does.
+  context_->RunOrScheduleTask(base::BindOnce(
+      [](WebNNTensorImpl* self) {
+        self->context_->RemoveWebNNTensorImpl(self->handle());
+      },
+      base::RetainedRef(this)));
 }
 
 bool WebNNTensorImpl::ImportTensorInternal() {
