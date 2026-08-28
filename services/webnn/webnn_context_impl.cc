@@ -616,9 +616,8 @@ void WebNNContextImpl::RemoveWebNNTensorImpl(
     const blink::WebNNTensorToken& handle) {
   const auto it = tensor_impls_.find(handle);
   CHECK(it != tensor_impls_.end());
-  if (it->get()->has_shared_image()) {
-    it->get()->DestroyAccessAndRepresentationAndWait();
-  } else {
+  // Defer shared-image teardown for references retained by RunDispatch (webnn_graph_impl.cc:74).
+  if (!it->get()->has_shared_image()) {
     memory_type_tracker_.TrackMemFree(it->get()->PackedByteLength());
   }
   // Upon calling erase, the handle will no longer refer to a valid
