@@ -341,6 +341,9 @@ GraphImplOrt::CreateSessionFromCompiledGraph(
         operand_input_name_to_onnx_input_name,
     base::flat_map<std::string, std::string>
         operand_output_name_to_onnx_output_name) {
+  return base::unexpected(mojom::Error::New(
+      mojom::Error::Code::kNotSupportedError,
+      "Loading compiler-controlled ORT graphs is not supported."));
   ScopedOrtSession session;
   const OrtApi* ort_api = PlatformFunctions::GetInstance()->ort_api();
   if (ORT_CALL_FAILED(ort_api->CreateSessionFromArray(
