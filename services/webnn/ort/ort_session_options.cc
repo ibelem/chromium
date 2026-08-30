@@ -287,6 +287,10 @@ scoped_refptr<SessionOptions> SessionOptions::Create(
   // which is intended: the security boundary is not a debug-tunable knob.
   CHECK_STATUS(ort_api->SetSessionGraphOptimizationLevel(session_options.get(),
                                                          ORT_DISABLE_ALL));
+  // Mirror InferenceSession's AOT inlining guard (inference_session.cc:1564).
+  CHECK_STATUS(ort_api->AddSessionConfigEntry(
+      session_options.get(),
+      kOrtSessionOptionsDisableAheadOfTimeFunctionInlining, "1"));
 
   // Disable model compilation in the GPU process, forcing all compilation on
   // compiling EPs to only happen in the Compiler process. This way a
