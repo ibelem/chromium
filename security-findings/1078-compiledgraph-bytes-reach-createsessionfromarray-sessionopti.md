@@ -1,0 +1,22 @@
+# Security finding #1078: CompiledGraph bytes reach CreateSessionFromArray. SessionOptions re…
+
+**Full report, discussion and status: https://github.com/ibelem/chromium/issues/78**
+
+| | |
+| --- | --- |
+| CWE | CWE-829: Inclusion of Functionality from Untrusted Control Sphere |
+| Location | [`targets/chromium/services/webnn/ort/ort_session_options.cc:273`](https://github.com/chromium/chromium/blob/cdbdcb205e3483f419c7d5a7dc56a048cddc228c/services/webnn/ort/ort_session_options.cc#L273-L289) — `SessionOptions::Create()` |
+| Trust boundary | Compromised WebNN Compiler process to privileged GPU process |
+| Validated for | chromiumWebnn |
+| Reachable from | chromiumWebnn |
+
+This file is an index entry only — it deliberately does not duplicate the
+issue. See https://github.com/ibelem/chromium/issues/78 for the root cause, exploit, reproduction and
+suggested fix.
+
+
+Models: ideaCreator `openai,gpt-5.6-cyber`, techLead `openai,gpt-5.6-cyber`, researcher `openai,gpt-5.6-cyber`, validator `openai,gpt-5.6-cyber`.
+
+
+---
+_Filed by an automated security-scan harness; AI-generated — review before acting._ Finding #1078.
