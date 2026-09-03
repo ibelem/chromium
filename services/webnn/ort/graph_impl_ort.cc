@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notimplemented.h"
@@ -62,6 +63,9 @@ BuildDescriptorsFromSession(
   std::vector<std::pair<std::string, std::string>> reverse_pairs;
   reverse_pairs.reserve(operand_name_to_onnx_name.size());
   for (const auto& [operand_name, onnx_name] : operand_name_to_onnx_name) {
+    if (!is_input && onnx_name.find('\0') != std::string::npos) {
+      return std::nullopt;
+    }
     reverse_pairs.emplace_back(onnx_name, operand_name);
   }
   base::flat_map<std::string, std::string> onnx_name_to_operand_name(
@@ -77,6 +81,7 @@ BuildDescriptorsFromSession(
 
   std::vector<std::pair<std::string, OperandDescriptor>> descriptor_pairs;
   descriptor_pairs.reserve(operand_count);
+  base::flat_set<std::string> session_output_names;
 
   for (size_t i = 0; i < operand_count; ++i) {
     char* onnx_name = nullptr;
@@ -91,6 +96,10 @@ BuildDescriptorsFromSession(
                        session, i, allocator, &onnx_name))
                  : ORT_CALL_FAILED(ort_api->SessionGetOutputName(
                        session, i, allocator, &onnx_name))) {
+      return std::nullopt;
+    }
+    // Mirror the binding-name uniqueness guard above (graph_impl_ort.cc:68).
+    if (!is_input && !session_output_names.insert(onnx_name).second) {
       return std::nullopt;
     }
     auto name_it = onnx_name_to_operand_name.find(onnx_name);
@@ -152,8 +161,12 @@ BuildDescriptorsFromSession(
     descriptor_pairs.emplace_back(operand_name, std::move(descriptor.value()));
   }
 
-  return base::flat_map<std::string, OperandDescriptor>(
+  base::flat_map<std::string, OperandDescriptor> descriptors(
       std::move(descriptor_pairs));
+  if (descriptors.size() != operand_count) {
+    return std::nullopt;
+  }
+  return descriptors;
 }
 
 }  // namespace
