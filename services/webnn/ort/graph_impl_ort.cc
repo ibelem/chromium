@@ -343,6 +343,13 @@ GraphImplOrt::CreateSessionFromCompiledGraph(
         operand_output_name_to_onnx_output_name) {
   ScopedOrtSession session;
   const OrtApi* ort_api = PlatformFunctions::GetInstance()->ort_api();
+  // Require compiled-model identity as ORT's compatibility check does (utils.cc:566).
+  if (ORT_CALL_FAILED(ort_api->AddSessionConfigEntry(
+          session_options->get(), "session.require_ep_context_model", "1"))) {
+    return base::unexpected(
+        mojom::Error::New(mojom::Error::Code::kUnknownError,
+                          "Failed to require a compiled OpenVINO model."));
+  }
   if (ORT_CALL_FAILED(ort_api->CreateSessionFromArray(
           env->get(), compiled_model_data.data(), compiled_model_data.size(),
           session_options->get(), ScopedOrtSession::Receiver(session).get()))) {
